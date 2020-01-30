@@ -32,24 +32,10 @@ class indel():
         self.id2_seq = id2_seq
 
 
-class insertion():
+class indel_mod():
 
-    def __init__(self, start, end, genome, size, path, wide, sequence='', id1_seq='', id2_seq=''):
-        self.start = start
-        self.end = end
-        self.genome = genome
-        self.size = size
-        self.id1_seq = id1_seq
-        self.id2_seq = id2_seq
-        self.sequence = sequence
-        self.path = path
-        for seq_file in SeqIO.parse(self.path, 'fasta'):
-            self.sequence = seq_file.seq[start - wide:end + wide]
-
-
-class deletion():
-
-    def __init__(self, start, end, genome, size, common_genome_start, path, wide, sequence='', id1_seq='', id2_seq=''):
+    def __init__(self, start, end, genome, size, common_genome_start, path, wide, sequence='', id1_seq='', id2_seq='',
+                 indel_type=''):
         self.start = start
         self.end = end
         self.genome = genome
@@ -59,6 +45,7 @@ class deletion():
         self.common_genome_start = common_genome_start
         self.sequence = sequence
         self.path = path
+        self.indel_type = indel_type
         for seq_file in SeqIO.parse(self.path, 'fasta'):
             self.sequence = seq_file.seq[start - wide:end + wide]
 
@@ -75,13 +62,17 @@ def keyfunc(item):
     return item[1]
 
 
-def similarity_filter(inp_file, level):
+def similarity_filter(inp_file, level, selecting_type):
     blast_qresult = SearchIO.read(inp_file, "blast-xml")
     table = []
     for hsp in blast_qresult:
         for h in hsp:
-            if float(h.bitscore) > int(level):
-                table.append(h)
+            if selecting_type == 'bitscore':
+                if float(h.bitscore) > int(level):
+                    table.append(h)
+            elif selecting_type == 'similarity':
+                if (float(h.ident_num) * 100) / h.query_span > int(level):
+                    table.append(h)
     print('Similarity filtering is done:', len(table))
     return table
 
@@ -104,7 +95,7 @@ def index(in_list, genome1, genome2):
     return genome_list
 
 
-def indel_search(in_list, min_len, max_len, comm_in_list, min_distance, max_distance):
+def indel_search(in_list, min_len, max_len):
     indel_list = []
     for frg_n in range(len(in_list) - 1):
         dist_list1 = [
@@ -115,47 +106,41 @@ def indel_search(in_list, min_len, max_len, comm_in_list, min_distance, max_dist
         dist_list1.sort(key=operator.attrgetter('size'))
         if dist_list1[0].size > 0 and dist_list1[1].size > 0 and dist_list1[2].size > 0 and dist_list1[3].size > 0:
             if max_len > dist_list1[0].size > min_len:
-                dist_list2 = [
-                    sizer(comm_in_list[frg_n].start, comm_in_list[frg_n + 1].start),
-                    sizer(comm_in_list[frg_n].end, comm_in_list[frg_n + 1].start),
-                    sizer(comm_in_list[frg_n].start, comm_in_list[frg_n + 1].end),
-                    sizer(comm_in_list[frg_n].end, comm_in_list[frg_n + 1].end)]
-                dist_list2.sort(key=operator.attrgetter('size'))
-                if dist_list2[0].size > 0 and dist_list2[1].size > 0 and dist_list2[2].size > 0 and dist_list2[3].size > 0:
-                    if max_distance > abs(dist_list1[0].size - dist_list2[0].size) > min_distance:
-                        indel_list.append(indel(in_list[frg_n + 1].segment_id,
-                                                in_list[frg_n].segment_id,
-                                                in_list[frg_n + 1].start,
-                                                in_list[frg_n + 1].end,
-                                                in_list[frg_n].start,
-                                                in_list[frg_n].end,
-                                                dist_list1[0].a,
-                                                dist_list1[0].b,
-                                                in_list[frg_n + 1].genome,
-                                                dist_list1[0].size,
-                                                in_list[frg_n].sequence,
-                                                in_list[frg_n + 1].sequence))
+                indel_list.append(indel(in_list[frg_n + 1].segment_id,
+                                        in_list[frg_n].segment_id,
+                                        in_list[frg_n + 1].start,
+                                        in_list[frg_n + 1].end,
+                                        in_list[frg_n].start,
+                                        in_list[frg_n].end,
+                                        dist_list1[0].a,
+                                        dist_list1[0].b,
+                                        in_list[frg_n + 1].genome,
+                                        dist_list1[0].size,
+                                        in_list[frg_n].sequence,
+                                        in_list[frg_n + 1].sequence))
     print('Indel search is done:', len(indel_list))
     return indel_list
 
 
-def insertions_intrcept(indel_list1, indel_list2, wide, file):
+def insertions_intrcept(indel_list1, indel_list2, wide, file1, file2):
     insertion_list = []
     number = 0
+
+    def loc_func(indel_type, file, specific_id):
+        number = 0
+        insertion_list.append(indel_mod(indels1.start, indels1.end,
+                                        indels1.genome, indels1.size, 0, indels1.genome, wide,
+                                        indels1.id1, indel_type=str(indel_type)))
+        with open(file, 'a') as f:
+            f.write('>ins' + str(number) + '_' + specific_id + '\n')
+            f.write(str(insertion_list[-1].sequence) + '\n' + '\n')
+            number += 1
+
     for indels1 in indel_list1:
-        insertion_list.append(insertion(indels1.start, indels1.end,
-                                        indels1.genome, indels1.size, indels1.genome, wide, indels1.id1))
-        with open(file, 'a') as f:
-            f.write('>ins' + str(number) + '\n')
-            f.write(str(insertion_list[-1].sequence) + '\n' + '\n')
-            number += 1
+        loc_func('insertion', file1, 'aligned to ' + str(indels1.genome))
     for indels2 in indel_list2:
-        insertion_list.append(insertion(indels2.start, indels2.end,
-                                        indels2.genome, indels2.size, indels2.genome, wide))
-        with open(file, 'a') as f:
-            f.write('>ins' + str(number) + '\n')
-            f.write(str(insertion_list[-1].sequence) + '\n' + '\n')
-            number += 1
+        loc_func('insertion', file2, 'aligned to ' + str(indels2.genome))
+
     print('Insertion search is done:', len(insertion_list))
     return insertion_list
 
@@ -177,9 +162,10 @@ def deletion_position(indel_list, index_list, wide, ak, file):
                     ID.append(indels2.end)
         ID.sort()
         start_id = ID[1]
-        deletion_list.append(deletion(indels1.start, indels1.end, indels1.genome, indels1.size, start_id, indels1.genome, wide))
+        deletion_list.append(indel_mod(indels1.start, indels1.end, indels1.genome, indels1.size, start_id,
+                                       indels1.genome, wide, indel_type='deletion'))
         with open(file, 'a') as f:
-            f.write('>del' + str(number) + str(ak) + '\n')
+            f.write('>del' + ' ' + str(number) + ' ' + str(ak) + '\n')
             f.write(str(deletion_list[-1].sequence) + '\n' + '\n')
             number += 1
     print('Deletion search is done:', len(deletion_list))
@@ -187,28 +173,30 @@ def deletion_position(indel_list, index_list, wide, ak, file):
 
 
 def main(first_align_path, second_align_path, first_genome, second_genome, third_genome, score_filtering_level,
-         min_len, max_len, min_distance, max_distance, wide):
-    a1 = similarity_filter(first_align_path, score_filtering_level)
-    a2 = similarity_filter(second_align_path, score_filtering_level)
+         min_len, max_len, wide, path1, path2, path3, path4, tip):
+
+    a1 = similarity_filter(first_align_path, score_filtering_level, selecting_type=str(tip))
+    a2 = similarity_filter(second_align_path, score_filtering_level, selecting_type=str(tip))
+
     b1 = index(a1, first_genome, second_genome)
     b2 = index(a2, first_genome, third_genome)
-    c11 = indel_search(b1[0], min_len, max_len, b1[1], min_distance, max_distance)
-    c21 = indel_search(b1[1], min_len, max_len, b1[0], min_distance, max_distance)
-    c12 = indel_search(b2[0], min_len, max_len, b2[1], min_distance, max_distance)
-    c22 = indel_search(b2[1], min_len, max_len, b2[0], min_distance, max_distance)
 
-    path1 = 'C:/Theileria/MATRIX/insertions_file.txt'
-    path2 = 'C:/Theileria/MATRIX/deletions_file_1.txt'
-    path3 = 'C:/Theileria/MATRIX/deletions_file_2.txt'
+    c11 = indel_search(b1[0], min_len, max_len)
+    c21 = indel_search(b1[1], min_len, max_len)
+    c12 = indel_search(b2[0], min_len, max_len)
+    c22 = indel_search(b2[1], min_len, max_len)
+
     f1 = open(path1, 'w')
     f2 = open(path2, 'w')
     f3 = open(path3, 'w')
-    d = insertions_intrcept(c11, c12, wide, path1)
+    f4 = open(path4, 'w')
+    d = insertions_intrcept(c11, c12, wide, path1, path4)
     f = deletion_position(c21, b1[0], wide, second_genome, path2)
     g = deletion_position(c22, b2[0], wide, third_genome, path3)
     f1.close()
     f2.close()
     f3.close()
+    f4.close()
 
     dx, fx, gx = [], [], []
     for i in d:
@@ -247,9 +235,14 @@ def main(first_align_path, second_align_path, first_genome, second_genome, third
     plt.show()
 
 
-main('C:/Theileria/MATRIX/Annulata_Orientalis_Full_Alignment.xml',
-     'C:/Theileria/MATRIX/Annulata_Parva_Full_Alignment.xml',
-     'C:/Theileria/MATRIX/THEILERIA_ANNULATA_1_CHR.txt',
-     'C:/Theileria/MATRIX/THEILERIA_ORIENTALIS_1_CHR.txt',
-     'C:/Theileria/MATRIX/THEILERIA_PARVA_1_CHR.txt',
-     200, 100, 1500, 50, 1000, 2500)
+main('C:/Theileria/Alignments/Annulata_Orientalis_Full_Alignment.xml',
+     'C:/Theileria/Alignments/Annulata_Parva_Full_Alignment.xml',
+     'C:/Theileria/Alignments/THEILERIA_ANNULATA_1_CHR.txt',
+     'C:/Theileria/Alignments/THEILERIA_ORIENTALIS_1_CHR.txt',
+     'C:/Theileria/Alignments/THEILERIA_PARVA_1_CHR.txt',
+     90, 80, 2000, 50,
+     'C:/Theileria/Alignments/insertions_file_1.txt',
+     'C:/Theileria/Alignments/deletions_file_1.txt',
+     'C:/Theileria/Alignments/deletions_file_2.txt',
+     'C:/Theileria/Alignments/insertions_file_2.txt',
+     'similarity')
