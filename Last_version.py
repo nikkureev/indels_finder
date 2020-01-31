@@ -64,6 +64,36 @@ def keyfunc(item):
 
 def similarity_filter(inp_file, level, selecting_type):
     blast_qresult = SearchIO.read(inp_file, "blast-xml")
+    analysis_bit = []
+    analysis_sim = []
+    analysis_len = []
+    for hsp in blast_qresult:
+        for h in hsp:
+            analysis_bit.append(h.bitscore)
+            analysis_sim.append((float(h.ident_num) * 100) / h.query_span)
+            analysis_len.append(h.aln_span)
+    analysis_bit.sort()
+    analysis_sim.sort()
+    analysis_len.sort()
+
+    for i, e in enumerate(analysis_bit):
+        plt.subplot(2, 2, 1)
+        plt.scatter(i, e, s=2)
+        plt.title('bitscore')
+
+    for i, e in enumerate(analysis_sim):
+        plt.subplot(2, 2, 2)
+        plt.scatter(i, e, s=2)
+        plt.title('similarity')
+
+    for i, e in enumerate(analysis_len):
+        plt.subplot(2, 2, 3)
+        plt.scatter(i, e, s=2)
+        plt.title('length')
+
+    #plt.show()
+    #print('Continue? y/n')
+    #p = str(input())
     table = []
     for hsp in blast_qresult:
         for h in hsp:
@@ -124,22 +154,21 @@ def indel_search(in_list, min_len, max_len):
 
 def insertions_intrcept(indel_list1, indel_list2, wide, file1, file2):
     insertion_list = []
-    number = 0
 
-    def loc_func(indel_type, file, specific_id):
-        number = 0
+    def loc_func(indel_type, file, specific_id, number):
         insertion_list.append(indel_mod(indels1.start, indels1.end,
                                         indels1.genome, indels1.size, 0, indels1.genome, wide,
                                         indels1.id1, indel_type=str(indel_type)))
         with open(file, 'a') as f:
             f.write('>ins' + str(number) + '_' + specific_id + '\n')
             f.write(str(insertion_list[-1].sequence) + '\n' + '\n')
-            number += 1
-
+    number = 0
     for indels1 in indel_list1:
-        loc_func('insertion', file1, 'aligned to ' + str(indels1.genome))
+        loc_func('insertion', file1, 'aligned to ' + str(indels1.genome), number)
+        number += 1
     for indels2 in indel_list2:
-        loc_func('insertion', file2, 'aligned to ' + str(indels2.genome))
+        loc_func('insertion', file2, 'aligned to ' + str(indels2.genome), number)
+        number += 1
 
     print('Insertion search is done:', len(insertion_list))
     return insertion_list
@@ -235,14 +264,14 @@ def main(first_align_path, second_align_path, first_genome, second_genome, third
     plt.show()
 
 
-main('C:/Theileria/Alignments/Annulata_Orientalis_Full_Alignment.xml',
-     'C:/Theileria/Alignments/Annulata_Parva_Full_Alignment.xml',
-     'C:/Theileria/Alignments/THEILERIA_ANNULATA_1_CHR.txt',
-     'C:/Theileria/Alignments/THEILERIA_ORIENTALIS_1_CHR.txt',
-     'C:/Theileria/Alignments/THEILERIA_PARVA_1_CHR.txt',
-     90, 80, 2000, 50,
-     'C:/Theileria/Alignments/insertions_file_1.txt',
-     'C:/Theileria/Alignments/deletions_file_1.txt',
-     'C:/Theileria/Alignments/deletions_file_2.txt',
-     'C:/Theileria/Alignments/insertions_file_2.txt',
-     'similarity')
+main('C:/Theileria/Alignments/AnnOri_2CHR_Alignment.xml',
+     'C:/Theileria/Alignments/AnnPar_2CHR_Alignment.xml',
+     'C:/Theileria/Alignments/THEILERIA_ANNULATA_2_CHR.fasta',
+     'C:/Theileria/Alignments/THEILERIA_ORIENTALIS_2_CHR.fasta',
+     'C:/Theileria/Alignments/THEILERIA_PARVA_2_CHR.fasta',
+     300, 80, 2000, 150,
+     'C:/Theileria/Alignments/insertions_file_1_2CHR.txt',
+     'C:/Theileria/Alignments/deletions_file_1_2CHR.txt',
+     'C:/Theileria/Alignments/deletions_file_2_2CHR.txt',
+     'C:/Theileria/Alignments/insertions_file_2_2CHR.txt',
+     'bitscore')
