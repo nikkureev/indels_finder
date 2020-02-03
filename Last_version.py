@@ -1,6 +1,8 @@
 from Bio import SearchIO
 from Bio import SeqIO
 import operator
+import os
+from Bio.Blast.Applications import NcbiblastnCommandline
 import matplotlib.pyplot as plt
 
 
@@ -58,44 +60,75 @@ class sizer():
         self.size = size + (self.b - self.a)
 
 
+class blast_record():
+
+    def __init__(self, inp_file):
+        self.blast_qr = SearchIO.read(inp_file, "blast-xml")
+        self.analysis_bit = []
+        self.analysis_sim = []
+        self.analysis_len = []
+        for hsp in self.blast_qr:
+            for h in hsp:
+                self.analysis_bit.append(h.bitscore)
+                self.analysis_sim.append((float(h.ident_num) * 100) / h.query_span)
+                self.analysis_len.append(h.aln_span)
+        self.analysis_bit.sort()
+        self.analysis_sim.sort()
+        self.analysis_len.sort()
+
+    def bit(self):
+        return self.analysis_bit
+
+    def sim(self):
+        return self.analysis_sim
+
+    def len(self):
+        return self.analysis_len
+
+    def blast_r(self):
+        return self.blast_qr
+
+
 def keyfunc(item):
     return item[1]
 
 
 def similarity_filter(inp_file, level, selecting_type):
-    blast_qresult = SearchIO.read(inp_file, "blast-xml")
-    analysis_bit = []
-    analysis_sim = []
-    analysis_len = []
-    for hsp in blast_qresult:
-        for h in hsp:
-            analysis_bit.append(h.bitscore)
-            analysis_sim.append((float(h.ident_num) * 100) / h.query_span)
-            analysis_len.append(h.aln_span)
-    analysis_bit.sort()
-    analysis_sim.sort()
-    analysis_len.sort()
+    main_in = blast_record(inp_file)
 
-    for i, e in enumerate(analysis_bit):
-        plt.subplot(2, 2, 1)
-        plt.scatter(i, e, s=2)
-        plt.title('bitscore')
+    #blast_qresult = SearchIO.read(inp_file, "blast-xml")
+    #analysis_bit = []
+    #analysis_sim = []
+    #analysis_len = []
+    #for hsp in blast_qresult:
+        #for h in hsp:
+       #     analysis_bit.append(h.bitscore)
+      #      analysis_sim.append((float(h.ident_num) * 100) / h.query_span)
+     #       analysis_len.append(h.aln_span)
+    #analysis_bit.sort()
+    #analysis_sim.sort()
+    #analysis_len.sort()
 
-    for i, e in enumerate(analysis_sim):
-        plt.subplot(2, 2, 2)
-        plt.scatter(i, e, s=2)
-        plt.title('similarity')
+    #for i, e in enumerate(analysis_bit):
+       # plt.subplot(2, 2, 1)
+      #  plt.scatter(i, e, s=2)
+     #   plt.title('bitscore')
 
-    for i, e in enumerate(analysis_len):
-        plt.subplot(2, 2, 3)
-        plt.scatter(i, e, s=2)
-        plt.title('length')
+    #for i, e in enumerate(analysis_sim):
+       # plt.subplot(2, 2, 2)
+      #  plt.scatter(i, e, s=2)
+     #   plt.title('similarity')
+
+    #for i, e in enumerate(analysis_len):
+      #  plt.subplot(2, 2, 3)
+     #   plt.scatter(i, e, s=2)
+    #    plt.title('length')
 
     #plt.show()
     #print('Continue? y/n')
     #p = str(input())
     table = []
-    for hsp in blast_qresult:
+    for hsp in main_in.blast_r():
         for h in hsp:
             if selecting_type == 'bitscore':
                 if float(h.bitscore) > int(level):
@@ -201,8 +234,33 @@ def deletion_position(indel_list, index_list, wide, ak, file):
     return deletion_list
 
 
+def alignfunc(in_list, out_f):
+    in_file = in_list[0]
+    db_file = in_list[1]
+    cmd = r'C:/Theileria_seq/ncbi-blast-2.9.0+/bin/makeblastdb -in %s -dbtype nucl' % db_file
+    os.system(cmd)
+    proga = r'C:/Theileria_seq/ncbi-blast-2.9.0+/bin/blastn'
+    blast = NcbiblastnCommandline(proga, query=in_file, db=db_file, out=out_f, outfmt=5,
+                                  word_size=12, evalue=0.001)
+    stdout, stderr = blast()
+
+
+def align_parsing(path, select_level):
+    blast_result = SearchIO.parse(path, "blast-xml")
+    for hsp in blast_result:
+        for hs in hsp:
+            for h in hs:
+                if h.bitscore > select_level:
+                    print(h.bitscore)
+                    print(h.query)
+                    print(h.hit_description)
+                    print()
+
+
 def main(first_align_path, second_align_path, first_genome, second_genome, third_genome, score_filtering_level,
-         min_len, max_len, wide, path1, path2, path3, path4, tip):
+         min_len, max_len, wide, path1, path2, path3, path4, tip, out_align_file_1, out_align_file_2, out_align_file_3,
+         align_select_level):
+    print(score_filtering_level)
 
     a1 = similarity_filter(first_align_path, score_filtering_level, selecting_type=str(tip))
     a2 = similarity_filter(second_align_path, score_filtering_level, selecting_type=str(tip))
@@ -227,51 +285,68 @@ def main(first_align_path, second_align_path, first_genome, second_genome, third
     f3.close()
     f4.close()
 
-    dx, fx, gx = [], [], []
-    for i in d:
-        x = [i.start, i.end]
-        dx.append(x)
-    for i in f:
-        x = [i.start, i.end]
-        fx.append(x)
-    for i in g:
-        x = [i.start, i.end]
-        gx.append(x)
+    group1 = [path1, path3]
+    group2 = [path4, path2]
+    group3 = [path2, path3]
 
-    font = {'size': 5}
-    plt.rc('font', **font)
+    #dx, fx, gx = [], [], []
+    #for i in d:
+        #x = [i.start, i.end]
+        #dx.append(x)
+    #for i in f:
+     #   x = [i.start, i.end]
+      #  fx.append(x)
+    #for i in g:
+     #   x = [i.start, i.end]
+      #  gx.append(x)
 
-    plt.subplot()
-    plt.scatter(0, 1)
-    plt.scatter(b1[0][-1].end, 1)
-    plt.text(0, 1.002, 'START')
-    plt.text(b1[0][-1].end, 1.002, 'END')
-    n = 0
-    for i in dx:
-        plt.plot(i, [1, 1])
-        plt.text(i[0], 1.0005, n)
-        n += 1
-    n = 0
-    for i in fx:
-        plt.plot(i, [0.999, 0.999])
-        plt.text(i[0], 0.9995, n)
-        n += 1
-    n = 0
-    for i in gx:
-        plt.plot(i, [0.998, 0.998])
-        plt.text(i[0], 0.9985, n)
-        n += 1
-    plt.show()
+    #font = {'size': 5}
+    #plt.rc('font', **font)
+
+    #plt.subplot()
+    #plt.scatter(0, 1)
+    #plt.scatter(b1[0][-1].end, 1)
+    #plt.text(0, 1.002, 'START')
+    # plt.text(b1[0][-1].end, 1.002, 'END')
+    #n = 0
+    #for i in dx:
+     #   plt.plot(i, [1, 1])
+      #  plt.text(i[0], 1.0005, n)
+       # n += 1
+    #n = 0
+    #for i in fx:
+     #   plt.plot(i, [0.999, 0.999])
+      #  plt.text(i[0], 0.9995, n)
+       # n += 1
+    #n = 0
+    #for i in gx:
+     #   plt.plot(i, [0.998, 0.998])
+      #  plt.text(i[0], 0.9985, n)
+       # n += 1
+    #plt.show()
+
+    alignfunc(group1, out_align_file_1)
+    alignfunc(group2, out_align_file_2)
+    alignfunc(group3, out_align_file_3)
+
+    align_parsing(out_align_file_1, align_select_level)
+    align_parsing(out_align_file_1, align_select_level)
+    align_parsing(out_align_file_1, align_select_level)
 
 
-main('C:/Theileria/Alignments/AnnOri_2CHR_Alignment.xml',
-     'C:/Theileria/Alignments/AnnPar_2CHR_Alignment.xml',
-     'C:/Theileria/Alignments/THEILERIA_ANNULATA_2_CHR.fasta',
-     'C:/Theileria/Alignments/THEILERIA_ORIENTALIS_2_CHR.fasta',
-     'C:/Theileria/Alignments/THEILERIA_PARVA_2_CHR.fasta',
-     300, 80, 2000, 150,
-     'C:/Theileria/Alignments/insertions_file_1_2CHR.txt',
-     'C:/Theileria/Alignments/deletions_file_1_2CHR.txt',
-     'C:/Theileria/Alignments/deletions_file_2_2CHR.txt',
-     'C:/Theileria/Alignments/insertions_file_2_2CHR.txt',
-     'bitscore')
+for i in range(75, 96, 1):
+    main('C:/Theileria/MATRIX/AnnOri_2CHR_Alignment.xml',
+         'C:/Theileria/MATRIX/AnnPar_2CHR_Alignment.xml',
+         'C:/Theileria/MATRIX/THEILERIA_ANNULATA_2_CHR.fasta',
+         'C:/Theileria/MATRIX/THEILERIA_ORIENTALIS_2_CHR.fasta',
+         'C:/Theileria/MATRIX/THEILERIA_PARVA_2_CHR.fasta',
+         i, 80, 3000, 1500,
+         'C:/Theileria/MATRIX/insertions_file_1_2CHR.txt',
+         'C:/Theileria/MATRIX/deletions_file_1_2CHR.txt',
+         'C:/Theileria/MATRIX/deletions_file_2_2CHR.txt',
+         'C:/Theileria/MATRIX/insertions_file_2_2CHR.txt',
+         'similarity',
+         'C:/Theileria/MATRIX/1_align_file.xml',
+         'C:/Theileria/MATRIX/2_align_file.xml',
+         'C:/Theileria/MATRIX/3_align_file.xml',
+         200)
