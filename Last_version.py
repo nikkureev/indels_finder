@@ -159,29 +159,46 @@ def index(in_list, genome1, genome2):
 
 
 def indel_search(in_list, min_len, max_len):
-    indel_list = []
-    for frg_n in range(len(in_list) - 1):
-        dist_list1 = [
-            sizer(in_list[frg_n].start, in_list[frg_n + 1].start),
-            sizer(in_list[frg_n].end, in_list[frg_n + 1].start),
-            sizer(in_list[frg_n].start, in_list[frg_n + 1].end),
-            sizer(in_list[frg_n].end, in_list[frg_n + 1].end)]
-        dist_list1.sort(key=operator.attrgetter('size'))
-        if dist_list1[0].size > 0 and dist_list1[1].size > 0 and dist_list1[2].size > 0 and dist_list1[3].size > 0:
-            if max_len > dist_list1[0].size > min_len:
-                indel_list.append(indel(in_list[frg_n + 1].segment_id,
-                                        in_list[frg_n].segment_id,
-                                        in_list[frg_n + 1].start,
-                                        in_list[frg_n + 1].end,
-                                        in_list[frg_n].start,
-                                        in_list[frg_n].end,
-                                        dist_list1[0].a,
-                                        dist_list1[0].b,
-                                        in_list[frg_n + 1].genome,
-                                        dist_list1[0].size,
-                                        in_list[frg_n].sequence,
-                                        in_list[frg_n + 1].sequence))
-    print('Indel search is done:', len(indel_list))
+    def linear_way(in_list, min_len, max_len):
+        indel_list = []
+        for frg_n in range(len(in_list) - 1):
+            dist_list1 = [
+                sizer(in_list[frg_n].start, in_list[frg_n + 1].start),
+                sizer(in_list[frg_n].end, in_list[frg_n + 1].start),
+                sizer(in_list[frg_n].start, in_list[frg_n + 1].end),
+                sizer(in_list[frg_n].end, in_list[frg_n + 1].end)]
+            dist_list1.sort(key=operator.attrgetter('size'))
+            if dist_list1[0].size > 0 and dist_list1[1].size > 0 and dist_list1[2].size > 0 and dist_list1[3].size > 0:
+                if max_len > dist_list1[0].size > min_len:
+                    indel_list.append(indel(in_list[frg_n + 1].segment_id,
+                                            in_list[frg_n].segment_id,
+                                            in_list[frg_n + 1].start,
+                                            in_list[frg_n + 1].end,
+                                            in_list[frg_n].start,
+                                            in_list[frg_n].end,
+                                            dist_list1[0].a,
+                                            dist_list1[0].b,
+                                            in_list[frg_n + 1].genome,
+                                            dist_list1[0].size,
+                                            in_list[frg_n].sequence,
+                                            in_list[frg_n + 1].sequence))
+        print('Indel search is done:', len(indel_list))
+
+    def matrix_way(in_list, min_len, max_len):
+        indel_matrix = [[0 for k in range(len(in_list))] for f in range(len(in_list))]
+        for i in range(len(in_list)):
+            for j in range(len(in_list)):
+                dist_list1 = [
+                sizer(in_list[i].start, in_list[j].start),
+                sizer(in_list[i].end, in_list[j].start),
+                sizer(in_list[i].start, in_list[j].end),
+                sizer(in_list[i].end, in_list[j].end)]
+                dist_list1.sort(key=operator.attrgetter('size'))
+                if dist_list1[0].size > 0 and dist_list1[1].size > 0 and dist_list1[2].size > 0 and dist_list1[
+                    3].size > 0:
+                    if max_len > dist_list1[0].size > min_len:
+                        indel_matrix[i][j] = dist_list1[0].size
+        print('Indel search is done:', len(indel_list))
     return indel_list
 
 
@@ -246,21 +263,28 @@ def alignfunc(in_list, out_f):
 
 
 def align_parsing(path, select_level):
+    print('started')
+    sum_bitscore = []
+    sum_bitscore_selected = []
     blast_result = SearchIO.parse(path, "blast-xml")
     for hsp in blast_result:
         for hs in hsp:
             for h in hs:
+                sum_bitscore.append(h.bitscore)
                 if h.bitscore > select_level:
                     print(h.bitscore)
                     print(h.query)
                     print(h.hit_description)
                     print()
+                    sum_bitscore_selected.append(h.bitscore)
+    return_list = [sum_bitscore, sum_bitscore_selected]
+    print('ended')
+    return return_list
 
 
 def main(first_align_path, second_align_path, first_genome, second_genome, third_genome, score_filtering_level,
          min_len, max_len, wide, path1, path2, path3, path4, tip, out_align_file_1, out_align_file_2, out_align_file_3,
          align_select_level):
-    print(score_filtering_level)
 
     a1 = similarity_filter(first_align_path, score_filtering_level, selecting_type=str(tip))
     a2 = similarity_filter(second_align_path, score_filtering_level, selecting_type=str(tip))
@@ -268,18 +292,25 @@ def main(first_align_path, second_align_path, first_genome, second_genome, third
     b1 = index(a1, first_genome, second_genome)
     b2 = index(a2, first_genome, third_genome)
 
+    #common_len = 0
     c11 = indel_search(b1[0], min_len, max_len)
+    #common_len += len(c11)
     c21 = indel_search(b1[1], min_len, max_len)
+    #common_len += len(c21)
     c12 = indel_search(b2[0], min_len, max_len)
+    #common_len += len(c12)
     c22 = indel_search(b2[1], min_len, max_len)
+    #common_len += len(c22)
+
+    #plt.scatter(i, common_len)
 
     f1 = open(path1, 'w')
     f2 = open(path2, 'w')
     f3 = open(path3, 'w')
     f4 = open(path4, 'w')
-    d = insertions_intrcept(c11, c12, wide, path1, path4)
-    f = deletion_position(c21, b1[0], wide, second_genome, path2)
-    g = deletion_position(c22, b2[0], wide, third_genome, path3)
+    insertions_intrcept(c11, c12, wide, path1, path4)
+    deletion_position(c21, b1[0], wide, second_genome, path2)
+    deletion_position(c22, b2[0], wide, third_genome, path3)
     f1.close()
     f2.close()
     f3.close()
@@ -329,24 +360,43 @@ def main(first_align_path, second_align_path, first_genome, second_genome, third
     alignfunc(group2, out_align_file_2)
     alignfunc(group3, out_align_file_3)
 
-    align_parsing(out_align_file_1, align_select_level)
-    align_parsing(out_align_file_1, align_select_level)
-    align_parsing(out_align_file_1, align_select_level)
+    res1 = align_parsing(out_align_file_1, align_select_level)
+    res2 = align_parsing(out_align_file_2, align_select_level)
+    res3 = align_parsing(out_align_file_3, align_select_level)
+    #print(res1[0])
+    #print(res2[0])
+    #print(res3[0])
+    #print(sum(res1[0]), sum(res2[0]), sum(res3[0]))
+    #print(len(res1[0]), len(res2[0]), len(res3[0]))
+    #try:
+     #   average_all = (sum(res1[0]) + sum(res2[0]) + sum(res3[0])) / \
+      #                (len(res1[0]) + len(res2[0]) + len(res3[0]))
+       # average_selected = (sum(res1[1]) + sum(res2[1]) + sum(res3[1])) / \
+                           #(len(res1[1]) + len(res2[1]) + len(res3[1]))
+    #except ZeroDivisionError:
+     #   average_all = 0
+     #   average_selected = 0
+    #print(average_all, average_selected)
+    #plt.scatter(i, average_all)
+    #plt.scatter(i, average_selected)
 
 
-for i in range(75, 96, 1):
-    main('C:/Theileria/MATRIX/AnnOri_2CHR_Alignment.xml',
-         'C:/Theileria/MATRIX/AnnPar_2CHR_Alignment.xml',
-         'C:/Theileria/MATRIX/THEILERIA_ANNULATA_2_CHR.fasta',
-         'C:/Theileria/MATRIX/THEILERIA_ORIENTALIS_2_CHR.fasta',
-         'C:/Theileria/MATRIX/THEILERIA_PARVA_2_CHR.fasta',
-         i, 80, 3000, 1500,
-         'C:/Theileria/MATRIX/insertions_file_1_2CHR.txt',
-         'C:/Theileria/MATRIX/deletions_file_1_2CHR.txt',
-         'C:/Theileria/MATRIX/deletions_file_2_2CHR.txt',
-         'C:/Theileria/MATRIX/insertions_file_2_2CHR.txt',
-         'similarity',
-         'C:/Theileria/MATRIX/1_align_file.xml',
-         'C:/Theileria/MATRIX/2_align_file.xml',
-         'C:/Theileria/MATRIX/3_align_file.xml',
-         200)
+#for i in range(83, 97, 1):
+    #print('selecting level: ', i)
+main('C:/Theileria/MATRIX/AnnOri_2CHR_Alignment.xml',
+     'C:/Theileria/MATRIX/AnnPar_2CHR_Alignment.xml',
+     'C:/Theileria/MATRIX/THEILERIA_ANNULATA_2_CHR_REV.fasta',
+     'C:/Theileria/MATRIX/THEILERIA_ORIENTALIS_2_CHR.fasta',
+     'C:/Theileria/MATRIX/THEILERIA_PARVA_2_CHR.fasta',
+     85, 80, 3000, 1000,
+     'C:/Theileria/MATRIX/insertions_file_1_2CHR.txt',
+     'C:/Theileria/MATRIX/deletions_file_1_2CHR.txt',
+     'C:/Theileria/MATRIX/deletions_file_2_2CHR.txt',
+     'C:/Theileria/MATRIX/insertions_file_2_2CHR.txt',
+     'similarity',
+     'C:/Theileria/MATRIX/1_align_file.xml',
+     'C:/Theileria/MATRIX/2_align_file.xml',
+     'C:/Theileria/MATRIX/3_align_file.xml',
+     1000)
+print('=======================================')
+plt.show()
